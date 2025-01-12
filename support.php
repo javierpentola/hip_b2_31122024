@@ -28,7 +28,7 @@ try {
 
 // Verificar si el admin está logueado
 if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php'); // redirigir al login si no está logueado
+    header('Location: index.php'); // redirigir al login si no está logueado
     exit();
 }
 
@@ -42,7 +42,7 @@ try {
     if (!$admin) {
         // Admin no encontrado, cerrar sesión
         session_destroy();
-        header('Location: login.php');
+        header('Location: index.php');
         exit();
     }
 } catch (PDOException $e) {
@@ -1038,7 +1038,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             function logout() {
                 // Implementar lógica de cierre de sesión aquí
                 alert("Admin ha cerrado sesión");
-                window.location.href = 'login.php';
+                window.location.href = 'index.php';
             }
         </script>
     </body>

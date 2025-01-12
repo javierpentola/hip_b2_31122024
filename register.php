@@ -16,7 +16,7 @@ function generateUniqueAccountID($pdo) {
         // Generar un número aleatorio de 9 dígitos
         $accountID = mt_rand(100000000, 999999999);
 
-        $stmt = $pdo->prepare("SELECT Account_ID FROM Customer WHERE Account_ID = :accountID");
+        $stmt = $pdo->prepare("SELECT Account_ID FROM customer WHERE Account_ID = :accountID");
         $stmt->execute(['accountID' => $accountID]);
 
         $exists = ($stmt->rowCount() > 0);
@@ -26,11 +26,11 @@ function generateUniqueAccountID($pdo) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $firstName = trim($_POST['firstName']);
-    $lastName = trim($_POST['lastName']);
-    $username = trim($_POST['username']);
-    $email = trim($_POST['email']);
-    $password = trim($_POST['password']);
+    $firstName       = trim($_POST['firstName']);
+    $lastName        = trim($_POST['lastName']);
+    $username        = trim($_POST['username']);
+    $email           = trim($_POST['email']);
+    $password        = trim($_POST['password']);
     $confirmPassword = trim($_POST['confirmPassword']);
 
     if (empty($firstName) || empty($lastName) || empty($username) || empty($email) || empty($password) || empty($confirmPassword)) {
@@ -39,53 +39,83 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $error = "Las contraseñas no coinciden.";
     } else {
         try {
-            $pdo = new PDO("mysql:host=$host;dbname=$db", $user, $pass);
+            $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-            // Verificar si el email ya está registrado
-            $stmt = $pdo->prepare("SELECT * FROM Customer WHERE Email = :email");
+            // Iniciar transacción
+            $pdo->beginTransaction();
+
+            // Verificar si el email ya está registrado en customer
+            $stmt = $pdo->prepare("SELECT * FROM customer WHERE Email = :email");
             $stmt->execute(['email' => $email]);
 
             if ($stmt->rowCount() > 0) {
-                $error = "The email is already registered.";
+                $error = "El email ya está registrado.";
+                $pdo->rollBack();
             } else {
-                // Verificar si el nombre de usuario ya existe
-                $stmt = $pdo->prepare("SELECT * FROM Customer WHERE username = :username");
+                // Verificar si el nombre de usuario ya existe en customer
+                $stmt = $pdo->prepare("SELECT * FROM customer WHERE username = :username");
                 $stmt->execute(['username' => $username]);
 
                 if ($stmt->rowCount() > 0) {
                     $error = "El nombre de usuario ya está en uso.";
+                    $pdo->rollBack();
                 } else {
-                    // Generar Account_ID único
-                    $accountID = generateUniqueAccountID($pdo);
+                    // Verificar si el nombre de usuario ya existe en admins
+                    $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = :username");
+                    $stmt->execute(['username' => $username]);
 
-                    // Generar Consumption y Balance aleatorios
-                    $consumption = rand(0, 1000) + rand() / getrandmax();
-                    $balance = rand(0, 10000) + rand() / getrandmax();
+                    if ($stmt->rowCount() > 0) {
+                        $error = "El nombre de usuario ya está en uso en el panel de administración.";
+                        $pdo->rollBack();
+                    } else {
+                        // Generar Account_ID único
+                        $accountID = generateUniqueAccountID($pdo);
 
-                    // Hash de la contraseña
-                    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                        // Generar Consumption y Balance aleatorios
+                        $consumption = rand(0, 1000) + rand() / getrandmax();
+                        $balance     = rand(0, 10000) + rand() / getrandmax();
 
-                    // Insertar el nuevo usuario en la base de datos
-                    $insertStmt = $pdo->prepare("INSERT INTO Customer (Account_ID, First_Name, Last_Name, Consumption, Balance, Email, Password, username)
-                                                VALUES (:accountID, :firstName, :lastName, :consumption, :balance, :email, :password, :username)");
-                    $insertStmt->execute([
-                        'accountID'   => $accountID,
-                        'firstName'   => $firstName,
-                        'lastName'    => $lastName,
-                        'consumption' => $consumption,
-                        'balance'     => $balance,
-                        'email'       => $email,
-                        'password'    => $hashedPassword,
-                        'username'    => $username
-                    ]);
+                        // Hash de la contraseña
+                        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-                    // Mensaje de éxito (más comercial)
-                    $success_message = "¡Felicitaciones! Tu cuenta ha sido creada exitosamente. 
-                                        Ahora puedes <a href='index.html'>iniciar sesión</a> y disfrutar de nuestros servicios.";
+                        // Insertar el nuevo usuario en la tabla customer
+                        $insertCustomer = $pdo->prepare("INSERT INTO customer (Account_ID, First_Name, Last_Name, Consumption, Balance, Email, Password, username)
+                                                         VALUES (:accountID, :firstName, :lastName, :consumption, :balance, :email, :password, :username)");
+                        $insertCustomer->execute([
+                            'accountID'   => $accountID,
+                            'firstName'   => $firstName,
+                            'lastName'    => $lastName,
+                            'consumption' => $consumption,
+                            'balance'     => $balance,
+                            'email'       => $email,
+                            'password'    => $hashedPassword,
+                            'username'    => $username
+                        ]);
+
+                        // Insertar el nuevo usuario en la tabla admins
+                        $insertAdmin = $pdo->prepare("INSERT INTO admins (username, password, role_id, is_logged_in, last_login)
+                                                      VALUES (:username, :password, :role_id, 0, NULL)");
+                        $insertAdmin->execute([
+                            'username' => $username,
+                            'password' => $hashedPassword,
+                            'role_id'  => 1 // Asumiendo que 1 es el ID para el rol de admin
+                        ]);
+
+                        // Confirmar transacción
+                        $pdo->commit();
+
+                        // Mensaje de éxito
+                        $success_message = "¡Felicitaciones! Tu cuenta ha sido creada exitosamente. 
+                                            Tu número de cuenta es: <strong>" . htmlspecialchars($accountID) . "</strong>. 
+                                            Ahora puedes <a href='admin_login.php'>iniciar sesión</a> y disfrutar de nuestros servicios.";
+                    }
                 }
             }
         } catch (PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             $error = "Error de conexión: " . $e->getMessage();
         }
     }
@@ -206,20 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             opacity: 1;
         }
 
-        .notification-badge {
-            background-color: #ff4444;
-            color: white;
-            border-radius: 50%;
-            padding: 0.25rem 0.5rem;
-            font-size: 0.75rem;
-            margin-left: auto;
-        }
-
-        .accessible-mode .notification-badge {
-            background-color: #ffffff;
-            color: #000000;
-        }
-
         .logo-container {
             padding: 1rem;
             margin: 1rem;
@@ -278,16 +294,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             margin-top: auto;
         }
 
-        .chat-container {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 1rem;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-
         .form-container {
             background-color: white;
             border-radius: 8px;
@@ -295,10 +301,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             padding: 2rem;
             max-width: 400px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         .form-group {
             margin-bottom: 1rem;
+            width: 100%;
         }
 
         .form-group label {
@@ -317,8 +328,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .submit-btn {
             width: 100%;
             padding: 0.75rem;
-            background-color: var(--accent-color);
-            color: white;
+            background-color: #f3c517;  /* Color de fondo amarillo */
+            color: #000;  /* Texto en negro */
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -329,6 +340,59 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .submit-btn:hover {
             background-color: var(--primary-dark);
+        }
+
+        .recover-password {
+            text-align: center;
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .recover-password a {
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .recover-password a:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            background-color: #ffdddd;
+            border-left: 6px solid #f44336;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-weight: 500;
+            width: 100%;
+            text-align: center;
+        }
+
+        .success-message {
+            background-color: #ddffdd;
+            border-left: 6px solid #4CAF50;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-weight: 500;
+            text-align: center;
+            width: 100%;
+        }
+
+        .main-content h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .success-message a {
+            color: var(--primary-dark);
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .success-message a:hover {
+            text-decoration: underline;
         }
 
         @media (max-width: 768px) {
@@ -342,67 +406,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 margin-left: var(--sidebar-width);
             }
         }
-		
-		/* Estilos para mensajes de error */
-.error-message {
-    background-color: #ffdddd;
-    border-left: 6px solid #f44336;
-    padding: 10px;
-    margin-bottom: 15px;
-    border-radius: 4px;
-}
-
-    .error-message {
-        background-color: #ffdddd;
-        border-left: 6px solid #f44336;
-        padding: 10px;
-        margin-bottom: 15px;
-        border-radius: 4px;
-        font-weight: 500;
-    }
-
-    /* Estilos para mensajes de éxito */
-    .success-message {
-        background-color: #ddffdd;
-        border-left: 6px solid #4CAF50;
-        padding: 10px;
-        margin-bottom: 15px;
-        border-radius: 4px;
-        font-weight: 500;
-        text-align: center;
-    }
-
-    /* Asegurar que el formulario esté correctamente centrado y no afecte otros elementos */
-    .form-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* Ajustar el título para que sea visible */
-    .main-content h1 {
-        text-align: center;
-        margin-bottom: 20px;
-    }
-
-    /* Opcional: Estilos adicionales para mejorar la apariencia del enlace en el mensaje de éxito */
-    .success-message a {
-        color: var(--primary-dark);
-        text-decoration: none;
-        font-weight: bold;
-    }
-
-    .success-message a:hover {
-        text-decoration: underline;
-
     </style>
 </head>
 <body>
+
+    <svg style="display: none;">
+        <defs>
+            <filter id="protanopia-filter">
+                <feColorMatrix type="matrix" values="0.567, 0.433, 0,     0, 0
+                                                     0.558, 0.442, 0,     0, 0
+                                                     0,     0.242, 0.758, 0, 0
+                                                     0,     0,     0,     1, 0"/>
+            </filter>
+            <filter id="deuteranopia-filter">
+                <feColorMatrix type="matrix" values="0.625, 0.375, 0,   0, 0
+                                                     0.7,   0.3,   0,   0, 0
+                                                     0,     0.3,   0.7, 0, 0
+                                                     0,     0,     0,   1, 0"/>
+            </filter>
+            <filter id="tritanopia-filter">
+                <feColorMatrix type="matrix" values="0.95, 0.05,  0,     0, 0
+                                                     0,    0.433, 0.567, 0, 0
+                                                     0,    0.475, 0.525, 0, 0
+                                                     0,    0,     0,     1, 0"/>
+            </filter>
+        </defs>
+    </svg>
+
     <nav class="sidebar">
         <div class="brand">HIP ENERGY</div>
         <div class="nav-items">
-            <a href="index.php" class="nav-item">
+            <a href="admin_login.php" class="nav-item">
                 <i class="fas fa-sign-in-alt"></i>
                 <span>Login</span>
             </a>
@@ -414,7 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <i class="fas fa-key"></i>
                 <span>Recover Password</span>
             </a>
-            <a href="admin_login.php" class="nav-item">
+            <a href="admin_dashboard.php" class="nav-item">
                 <i class="fas fa-home"></i>
                <span>Admin dashboard</span>
             </a>
@@ -442,111 +476,56 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </nav>
 
-<main class="main-content">
-    <h1>Sign Up</h1>
-    <div class="form-container">
-        <?php if (!empty($error)): ?>
-            <div class="error-message">
-                <?php echo htmlspecialchars($error); ?>
-            </div>
-        <?php endif; ?>
-
-        <?php if (!empty($success_message)): ?>
-            <div class="success-message">
-<?php 
-    // Make sure that $accountID is defined and safe to display
-    echo "Congratulations! Your account has been successfully created. Your account number is: <strong>" . htmlspecialchars($accountID) . "</strong>. 
-          You can now <a href='index.php'>log in</a> and enjoy our services."; 
-?>
-
-            </div>
-        <?php else: ?>
-            <form id="signupForm" method="POST" action="register.php">
-                <div class="form-group">
-                    <label for="firstName">First Name</label>
-                    <input type="text" id="firstName" name="firstName" required value="<?php echo isset($firstName) ? htmlspecialchars($firstName) : ''; ?>">
+    <main class="main-content">
+        <h1>Sign Up</h1>
+        <div class="form-container">
+            <?php if (!empty($error)): ?>
+                <div class="error-message">
+                    <?php echo htmlspecialchars($error); ?>
                 </div>
-                <div class="form-group">
-                    <label for="lastName">Last Name</label>
-                    <input type="text" id="lastName" name="lastName" required value="<?php echo isset($lastName) ? htmlspecialchars($lastName) : ''; ?>">
+            <?php endif; ?>
+
+            <?php if (!empty($success_message)): ?>
+                <div class="success-message">
+                    <?php echo $success_message; ?>
                 </div>
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" required value="<?php echo isset($username) ? htmlspecialchars($username) : ''; ?>">
-                </div>
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" required value="<?php echo isset($email) ? htmlspecialchars($email) : ''; ?>">
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <div class="form-group">
-                    <label for="confirmPassword">Confirm Password</label>
-                    <input type="password" id="confirmPassword" name="confirmPassword" required>
-                </div>
-                <button type="submit" class="submit-btn">Sign Up</button>
-            </form>
-        <?php endif; ?>
-    </div>
-</main>
-
-
-
-
-
-<style>
-    .submit-btn {
-        background-color: #f3c517;  /* Color de fondo amarillo */
-        color: white;  /* Texto en blanco */
-        padding: 0.75rem 1.5rem;
-        border: none;
-        border-radius: 0.25rem;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-    }
-
-    .submit-btn:hover {
-        background-color: #d4a017;  /* Cambio de color al pasar el ratón por encima */
-    }
-</style>
-
-
-    <svg style="display: none;">
-        <defs>
-            <filter id="protanopia-filter">
-                <feColorMatrix type="matrix" values="0.567, 0.433, 0,     0, 0
-                                                     0.558, 0.442, 0,     0, 0
-                                                     0,     0.242, 0.758, 0, 0
-                                                     0,     0,     0,     1, 0"/>
-            </filter>
-            <filter id="deuteranopia-filter">
-                <feColorMatrix type="matrix" values="0.625, 0.375, 0,   0, 0
-                                                     0.7,   0.3,   0,   0, 0
-                                                     0,     0.3,   0.7, 0, 0
-                                                     0,     0,     0,   1, 0"/>
-            </filter>
-            <filter id="tritanopia-filter">
-                <feColorMatrix type="matrix" values="0.95, 0.05,  0,     0, 0
-                                                     0,    0.433, 0.567, 0, 0
-                                                     0,    0.475, 0.525, 0, 0
-                                                     0,    0,     0,     1, 0"/>
-            </filter>
-        </defs>
-    </svg>
+            <?php else: ?>
+                <form id="signupForm" method="POST" action="register.php">
+                    <div class="form-group">
+                        <label for="firstName">First Name</label>
+                        <input type="text" id="firstName" name="firstName" required value="<?php echo isset($firstName) ? htmlspecialchars($firstName) : ''; ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="lastName">Last Name</label>
+                        <input type="text" id="lastName" name="lastName" required value="<?php echo isset($lastName) ? htmlspecialchars($lastName) : ''; ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" required value="<?php echo isset($username) ? htmlspecialchars($username) : ''; ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required value="<?php echo isset($email) ? htmlspecialchars($email) : ''; ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" required>
+                    </div>
+                    <button type="submit" class="submit-btn">Sign Up</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    </main>
 
     <script>
-        const accessibleModeToggle = document.getElementById('accessibleModeToggle');
         const protanopiaToggle = document.getElementById('protanopiaToggle');
         const deuteranopiaToggle = document.getElementById('deuteranopiaToggle');
         const tritanopiaToggle = document.getElementById('tritanopiaToggle');
         const normalModeToggle = document.getElementById('normalModeToggle');
-        
-        accessibleModeToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.body.classList.toggle('accessible-mode');
-        });
 
         function toggleColorBlindMode(mode) {
             document.documentElement.classList.remove('protanopia', 'deuteranopia', 'tritanopia');
@@ -572,58 +551,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             toggleColorBlindMode(null);
         });
 
-        // Chat functionality (commented out)
-        /*const chatMessages = document.getElementById('chatMessages');
-        const messageInput = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
+        (function() {
+            let timeout;
+            const redirectUrl = 'admin_login.php';
+            const timeoutDuration = 5 * 60 * 1000; // 5 minutos en milisegundos
 
-        function addMessage(message, isUser = true) {
-            const messageElement = document.createElement('div');
-            messageElement.textContent = message;
-            messageElement.style.marginBottom = '10px';
-            messageElement.style.padding = '5px';
-            messageElement.style.borderRadius = '5px';
-            messageElement.style.maxWidth = '70%';
-            
-            if (isUser) {
-                messageElement.style.backgroundColor = '#e6f2ff';
-                messageElement.style.marginLeft = 'auto';
-            } else {
-                messageElement.classList.add('bot-message');
-                const botIcon = document.createElement('div');
-                botIcon.classList.add('bot-icon');
-                botIcon.innerHTML = '🦁'; // Cambiado de '🤖' a '🦁'
-                messageElement.insertBefore(botIcon, messageElement.firstChild);
+            // Reiniciar el temporizador
+            function resetTimer() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, timeoutDuration);
             }
-            
-            chatMessages.appendChild(messageElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
 
-        function handleSendMessage() {
-            const message = messageInput.value.trim();
-            if (message) {
-                addMessage(message);
-                messageInput.value = '';
-                
-                // Simulate a response (you can replace this with actual backend logic)
-                setTimeout(() => {
-                    addMessage("Thank you for reporting the issue. Our team will look into it and get back to you soon.", false);
-                }, 1000);
-            }
-        }
-
-        sendButton.addEventListener('click', handleSendMessage);
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                handleSendMessage();
-            }
-        });
-
-        // Add initial message
-        addMessage("Welcome to Fault Reporting. How can we assist you today?", false);*/
-
-
+            // Eventos que reinician el temporizador
+            window.onload = resetTimer;
+            document.onmousemove = resetTimer;
+            document.onkeydown = resetTimer;
+            document.onclick = resetTimer;
+            document.onscroll = resetTimer;
+        })();
     </script>
 </body>
 </html>

@@ -22,7 +22,7 @@ try {
 
 // Verificar si el admin está logueado
 if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php'); // redirigir al login si no está logueado
+    header('Location: index.php'); // redirigir al login si no está logueado
     exit();
 }
 

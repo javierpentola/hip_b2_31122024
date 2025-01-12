@@ -40,6 +40,6 @@ if (isset($_SESSION['admin_id'])) {
 }
 
 // Redirigir al login
-header('Location: login.php');
+header('Location: index.php');
 exit();
 ?>

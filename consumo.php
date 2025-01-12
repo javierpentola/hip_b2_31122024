@@ -1,16 +1,10 @@
 <?php
 // consumo.php
 
-// Incluir funciones si deseas registrar actividades (opcional)
-// require_once 'functions.php';
-
 // Habilitar la visualización de errores para depuración (Eliminar en producción)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-
-// Iniciar sesión
-session_start();
 
 // Datos de conexión a la base de datos en InfinityFree
 $host = 'localhost';
@@ -20,53 +14,18 @@ $db   = 'hipgeneraldb';
 
 // Conectar a la base de datos usando PDO
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8", $user, $pass);
+    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     die("Error de conexión: " . $e->getMessage());
 }
 
-// Verificar si el admin está logueado
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php'); // redirigir al login si no está logueado
-    exit();
-}
-
-$admin_id = $_SESSION['admin_id'];
-
-// Obtener datos del admin (opcional, para mostrar en la interfaz)
-try {
-    $stmt = $pdo->prepare("SELECT username FROM admins WHERE id = :id");
-    $stmt->execute(['id' => $admin_id]);
-    $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$admin) {
-        // Admin no encontrado, cerrar sesión
-        session_destroy();
-        header('Location: login.php');
-        exit();
-    }
-} catch (PDOException $e) {
-    die("Error al obtener datos del admin: " . $e->getMessage());
-}
-
-// Obtener configuraciones del sistema
-try {
-    $stmt = $pdo->prepare("SELECT * FROM system_settings LIMIT 1");
-    $stmt->execute();
-    $settings = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$settings) {
-        // Insertar configuración por defecto si no existe
-        $stmt = $pdo->prepare("INSERT INTO system_settings (currency, tax_rate) VALUES ('USD', 0.00)");
-        $stmt->execute();
-        $settings = [
-            'currency' => 'USD',
-            'tax_rate' => '0.00',
-            'last_updated' => date('Y-m-d H:i:s')
-        ];
-    }
-} catch (PDOException $e) {
-    die("Error al obtener configuraciones: " . $e->getMessage());
-}
+// Definir configuraciones directamente en el código
+$settings = [
+    'currency' => 'USD',
+    'tax_rate' => 0.00, // Representa el 0%
+    'last_updated' => date('Y-m-d H:i:s')
+];
 
 // Función para obtener el símbolo de la moneda
 function getCurrencySymbol($currency) {
@@ -148,7 +107,7 @@ try {
     $energy_savings = $last_month > 0 ? (($last_month - $total_consumption) / $last_month) * 100 : 0;
 
     // Next Bill Estimate (Asumiendo $0.15 por kWh más impuestos)
-    $tax_rate = $settings['tax_rate'] / 100;
+    $tax_rate = $settings['tax_rate']; // Ya es decimal
     $next_bill_estimate = ($total_consumption * 0.15) * (1 + $tax_rate);
 
     // Energy Efficiency Score (Puntuación arbitraria basada en consumo total)
@@ -163,9 +122,6 @@ try {
         $efficiency_score = 'D';
     }
 
-    // (Opcional) Registrar actividad
-    // logActivity($pdo, $admin_id, "Accedió a la página de Consumo.");
-    
 } catch (PDOException $e) {
     die("Error al obtener datos de consumo: " . $e->getMessage());
 }
@@ -175,7 +131,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HIP ENERGY Navigation - Admin Panel - Consumo</title>
+    <title>HIP ENERGY Navigation - Consumption Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -601,23 +557,7 @@ try {
             toggleColorBlindMode(null);
         });
 
-        function updateChartsForAccessibleMode() {
-            const isAccessible = document.body.classList.contains('accessible-mode');
-            const charts = [monthlyChart, dailyChart, sourcesChart];
-            charts.forEach(chart => {
-                if (isAccessible) {
-                    chart.options.plugins.legend.labels.color = '#000000';
-                    chart.options.scales.x.ticks.color = '#000000';
-                    chart.options.scales.y.ticks.color = '#000000';
-                } else {
-                    chart.options.plugins.legend.labels.color = '#000000';
-                    chart.options.scales.x.ticks.color = '#000000';
-                    chart.options.scales.y.ticks.color = '#000000';
-                }
-                chart.update();
-            });
-        }
-
+        // Configuración común de Chart.js
         const chartOptions = {
             responsive: true,
             maintainAspectRatio: false,
@@ -690,7 +630,8 @@ try {
                     borderColor: '#fff'
                 }]
             },
-            options: { ...chartOptions,
+            options: { 
+                ...chartOptions,
                 plugins: {
                     legend: {
                         display: true
@@ -704,6 +645,7 @@ try {
             }
         });
 
+        // Función para crear patrones personalizados (opcional)
         function createPattern(ctx, color, index) {
             const patternCanvas = document.createElement('canvas');
             const patternContext = patternCanvas.getContext('2d');

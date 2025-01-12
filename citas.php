@@ -9,9 +9,6 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Iniciar sesión
-session_start();
-
 // Datos de conexión a la base de datos en InfinityFree
 $host = 'localhost';
 $user = 'root';
@@ -20,40 +17,21 @@ $db   = 'hipgeneraldb';
 
 // Conectar a la base de datos usando PDO
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8", $user, $pass);
+    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     die("Error de conexión: " . $e->getMessage());
 }
 
-// Verificar si el admin está logueado
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php'); // redirigir al login si no está logueado
-    exit();
-}
+// Inicializar variables para mensajes
+$error = '';
+$success = '';
 
-$admin_id = $_SESSION['admin_id'];
-
-// Obtener datos del admin (opcional, para mostrar en la interfaz)
-try {
-    $stmt = $pdo->prepare("SELECT username FROM admins WHERE id = :id");
-    $stmt->execute(['id' => $admin_id]);
-    $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$admin) {
-        // Admin no encontrado, cerrar sesión
-        session_destroy();
-        header('Location: login.php');
-        exit();
-    }
-} catch (PDOException $e) {
-    die("Error al obtener datos del admin: " . $e->getMessage());
-}
-
-// Procesar formulario de añadir cita
+// Procesar formulario de añadir o editar cita
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'add') {
         $title = trim($_POST['title']);
-        $description = trim($_POST['description']);
+        $description = isset($_POST['description']) ? trim($_POST['description']) : '';
         $date = $_POST['date'];
         $time = $_POST['time'];
         $location = trim($_POST['location']);
@@ -76,8 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     'location' => $location
                 ]);
 
-                // (Opcional) Registrar actividad
-                logActivity($pdo, $admin_id, "Añadió una nueva cita: '$title' el $date a las $time.");
+                // (Opcional) Registrar actividad sin admin_id
+                if (function_exists('logActivity')) {
+                    logActivity($pdo, "Añadió una nueva cita: '$title' el $date a las $time.", null);
+                }
 
                 $success = "Cita añadida exitosamente.";
             } catch (PDOException $e) {
@@ -87,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } elseif ($_POST['action'] === 'edit' && isset($_POST['id'])) {
         $id = $_POST['id'];
         $title = trim($_POST['title']);
-        $description = trim($_POST['description']);
+        $description = isset($_POST['description']) ? trim($_POST['description']) : '';
         $date = $_POST['date'];
         $time = $_POST['time'];
         $location = trim($_POST['location']);
@@ -111,8 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     'id' => $id
                 ]);
 
-                // (Opcional) Registrar actividad
-                logActivity($pdo, $admin_id, "Editó la cita ID: $id.");
+                // (Opcional) Registrar actividad sin admin_id
+                if (function_exists('logActivity')) {
+                    logActivity($pdo, "Editó la cita ID: $id.", null);
+                }
 
                 $success = "Cita actualizada exitosamente.";
             } catch (PDOException $e) {
@@ -135,8 +117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
             $stmt = $pdo->prepare("DELETE FROM appointments WHERE id = :id");
             $stmt->execute(['id' => $delete_id]);
 
-            // (Opcional) Registrar actividad
-            logActivity($pdo, $admin_id, "Eliminó la cita ID: $delete_id, Título: '{$appointment['title']}'.");
+            // (Opcional) Registrar actividad sin admin_id
+            if (function_exists('logActivity')) {
+                logActivity($pdo, "Eliminó la cita ID: $delete_id, Título: '{$appointment['title']}'.", null);
+            }
 
             $success = "Cita eliminada exitosamente.";
         } else {
@@ -172,11 +156,10 @@ function validateTime($time, $format = 'H:i') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HIP ENERGY Navigation - Admin Panel - Citas</title>
+    <title>HIP ENERGY Navigation</title>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* Reutilización de los estilos existentes */
         :root {
             --primary-color: #f2c517;
             --primary-dark: #d4a017;
@@ -316,14 +299,9 @@ function validateTime($time, $format = 'H:i') {
         .main-content {
             margin-left: var(--sidebar-width);
             padding: 2rem;
-            transition: margin-left var(--transition-speed) ease, background-color var(--transition-speed) ease, color: var(--transition-speed) ease;
+            transition: margin-left var(--transition-speed) ease;
             min-height: 100vh;
             background-color: var(--primary-color);
-        }
-
-        .accessible-mode .main-content {
-            background-color: var(--primary-color);
-            color: var(--text-color);
         }
 
         .main-content::before {
@@ -405,7 +383,6 @@ function validateTime($time, $format = 'H:i') {
             min-height: 100px;
             display: flex;
             flex-direction: column;
-            position: relative;
         }
 
         .calendar-date {
@@ -420,12 +397,6 @@ function validateTime($time, $format = 'H:i') {
             border-radius: 4px;
             font-size: 0.8rem;
             margin-bottom: 0.25rem;
-            cursor: pointer;
-        }
-
-        .appointment:hover {
-            background-color: var(--primary-dark);
-            color: var(--accent-color);
         }
 
         .appointment-list {
@@ -433,7 +404,7 @@ function validateTime($time, $format = 'H:i') {
         }
 
         .appointment-item {
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: white; /* Updated background color */
             border-radius: 8px;
             padding: 1rem;
             margin-bottom: 1rem;
@@ -448,100 +419,6 @@ function validateTime($time, $format = 'H:i') {
         .appointment-details {
             font-size: 0.9rem;
             color: var(--text-color);
-        }
-
-        /* Formulario de Añadir/Editar Cita */
-        .appointment-form {
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .appointment-form h2 {
-            margin-top: 0;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.5rem;
-            margin-bottom: 0.5rem;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        .btn {
-            background-color: var(--accent-color);
-            color: white;
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .btn:hover {
-            background-color: var(--primary-dark);
-        }
-
-        .btn-edit, .btn-delete {
-            background-color: #007bff;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 0.5rem;
-        }
-
-        .btn-edit:hover {
-            background-color: #0056b3;
-        }
-
-        .btn-delete {
-            background-color: #dc3545;
-        }
-
-        .btn-delete:hover {
-            background-color: #c82333;
-        }
-
-        /* Modal para Editar Cita */
-        .modal {
-            display: none; /* Hidden by default */
-            position: fixed; /* Stay in place */
-            z-index: 2000; /* Sit on top */
-            padding-top: 100px; /* Location of the box */
-            left: 0;
-            top: 0;
-            width: 100%; /* Full width */
-            height: 100%; /* Full height */
-            overflow: auto; /* Enable scroll if needed */
-            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            margin: auto;
-            padding: 1rem;
-            border: 1px solid #888;
-            width: 80%;
-            max-width: 500px;
-            border-radius: 8px;
-        }
-
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 1.5rem;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .close:hover,
-        .close:focus {
-            color: black;
-            text-decoration: none;
         }
 
         @media (max-width: 768px) {
@@ -564,19 +441,19 @@ function validateTime($time, $format = 'H:i') {
     <nav class="sidebar">
         <div class="brand">HIP ENERGY</div>
         <div class="nav-items">
-            <a href="home.php" class="nav-item">
+            <a href="home.html" class="nav-item">
                 <i class="fas fa-home"></i>
                 <span>Home</span>
             </a>
-            <a href="consumo.php" class="nav-item">
+            <a href="consumo.html" class="nav-item">
                 <i class="fas fa-chart-line"></i>
                 <span>Consumption</span>
             </a>
-            <a href="facturas.php" class="nav-item">
+            <a href="facturas.html" class="nav-item">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span>Bills</span>
             </a>
-            <a href="notificaciones.php" class="nav-item">
+            <a href="notificaciones.html" class="nav-item">
                 <i class="fas fa-bell"></i>
                 <span>Notifications</span>
                 <div class="notification-badge"><?php echo count($appointments); ?></div>
@@ -585,10 +462,13 @@ function validateTime($time, $format = 'H:i') {
                 <i class="fas fa-calendar-alt"></i>
                 <span>Appointments</span>
             </a>
-            <a href="modoaccesible.php" class="nav-item">
+            <a href="modoaccesible.html" class="nav-item">
                 <i class="fas fa-exclamation-triangle"></i>
                 <span>Fault Reporting</span>
             </a>
+        </div>
+        <div class="logo-container">
+            <img src="images/hiplogo.jpg" alt="HIP ENERGY Logo" class="logo">
         </div>
         <div class="vision-modes">
             <a href="#" class="nav-item" id="protanopiaToggle">
@@ -608,134 +488,125 @@ function validateTime($time, $format = 'H:i') {
                 <span>Normal Mode</span>
             </a>
         </div>
-        <div class="logo-container">
-            <img src="images/hiplogo.jpg" alt="HIP ENERGY Logo" class="logo">
-        </div>
     </nav>
 
     <main class="main-content">
         <h1>Appointments Dashboard</h1>
 
-        <!-- Formulario para Añadir Nueva Cita -->
-        <div class="appointment-form">
-            <h2>Add New Appointment</h2>
-            <?php if (isset($error) && $_POST['action'] !== 'edit'): ?>
-                <div class="error-message">
-                    <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
-                </div>
-            <?php endif; ?>
-            <?php if (isset($success) && $_POST['action'] !== 'edit'): ?>
-                <div class="success-message">
-                    <p style="color: green;"><?php echo htmlspecialchars($success); ?></p>
-                </div>
-            <?php endif; ?>
-            <form method="POST" action="citas.php">
-                <input type="hidden" name="action" value="add">
-                <label for="title">Title:</label>
-                <input type="text" id="title" name="title" class="form-input" required>
-
-                <label for="description">Description:</label>
-                <textarea id="description" name="description" class="form-input" rows="4"></textarea>
-
-                <label for="date">Date:</label>
-                <input type="date" id="date" name="date" class="form-input" required>
-
-                <label for="time">Time:</label>
-                <input type="time" id="time" name="time" class="form-input" required>
-
-                <label for="location">Location:</label>
-                <input type="text" id="location" name="location" class="form-input" required>
-
-                <button type="submit" class="btn">Add Appointment</button>
-            </form>
-        </div>
+        <!-- Mensajes de Error y Éxito -->
+        <?php if (!empty($error)): ?>
+            <div class="error-message" style="color: red; margin-bottom: 1rem;">
+                <?php echo htmlspecialchars($error); ?>
+            </div>
+        <?php endif; ?>
+        <?php if (!empty($success)): ?>
+            <div class="success-message" style="color: green; margin-bottom: 1rem;">
+                <?php echo htmlspecialchars($success); ?>
+            </div>
+        <?php endif; ?>
 
         <!-- Lista de Citas Existentes -->
         <div class="appointments-dashboard">
-            <h2>Upcoming Appointments</h2>
-            <?php foreach ($appointments as $appointment): ?>
-                <div class="appointment-item" data-id="<?php echo $appointment['id']; ?>">
-                    <div class="appointment-title"><?php echo htmlspecialchars($appointment['title']); ?></div>
-                    <div class="appointment-details">
-                        <p><strong>Date:</strong> <?php echo date('M d, Y', strtotime($appointment['date'])); ?></p>
-                        <p><strong>Time:</strong> <?php echo date('h:i A', strtotime($appointment['time'])); ?></p>
-                        <p><strong>Location:</strong> <?php echo htmlspecialchars($appointment['location']); ?></p>
-                        <?php if (!empty($appointment['description'])): ?>
-                            <p><strong>Description:</strong> <?php echo nl2br(htmlspecialchars($appointment['description'])); ?></p>
-                        <?php endif; ?>
-                    </div>
-                    <div class="appointment-actions">
-                        <button class="notification-action btn-edit" data-id="<?php echo $appointment['id']; ?>">Edit</button>
-                        <form method="POST" action="citas.php" style="display:inline;">
-                            <input type="hidden" name="delete_id" value="<?php echo $appointment['id']; ?>">
-                            <button type="submit" class="notification-action btn-delete" onclick="return confirm('Are you sure you want to delete this appointment?');">Delete</button>
-                        </form>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-            <?php if (count($appointments) === 0): ?>
-                <p>No upcoming appointments.</p>
-            <?php endif; ?>
+            <div class="calendar-header">
+                <button class="calendar-nav-btn" id="prevMonth"><i class="fas fa-chevron-left"></i></button>
+                <span id="currentMonth"><?php echo date('F Y'); ?></span>
+                <button class="calendar-nav-btn" id="nextMonth"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <div class="calendar-grid" id="calendarGrid">
+                <!-- Los días del calendario se insertarán dinámicamente aquí -->
+            </div>
+            <div class="appointment-list">
+                <h2>Upcoming Appointments</h2>
+                <?php if (count($appointments) > 0): ?>
+                    <?php foreach ($appointments as $appointment): ?>
+                        <div class="appointment-item" data-id="<?php echo $appointment['id']; ?>">
+                            <div class="appointment-title"><?php echo htmlspecialchars($appointment['title']); ?></div>
+                            <div class="appointment-details">
+                                <p>Fecha: <?php echo date('d/m/Y', strtotime($appointment['date'])); ?></p>
+                                <p>Hora: <?php echo date('h:i A', strtotime($appointment['time'])); ?></p>
+                                <p>Ubicación: <?php echo htmlspecialchars($appointment['location']); ?></p>
+                                <?php if (!empty($appointment['description'])): ?>
+                                    <p>Descripción: <?php echo nl2br(htmlspecialchars($appointment['description'])); ?></p>
+                                <?php endif; ?>
+                            </div>
+                            <div class="appointment-actions">
+                                <button class="btn-edit" data-id="<?php echo $appointment['id']; ?>">Editar</button>
+                                <form method="POST" action="citas.php" style="display:inline;">
+                                    <input type="hidden" name="delete_id" value="<?php echo $appointment['id']; ?>">
+                                    <button type="submit" class="btn-delete" onclick="return confirm('¿Estás seguro de que deseas eliminar esta cita?');">Eliminar</button>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <p>No hay citas próximas.</p>
+                <?php endif; ?>
+            </div>
         </div>
     </main>
 
     <!-- Modal para Editar Cita -->
-    <div id="editModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Edit Appointment</h2>
-            <?php if (isset($error) && $_POST['action'] === 'edit'): ?>
-                <div class="error-message">
-                    <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
-                </div>
-            <?php endif; ?>
-            <?php if (isset($success) && $_POST['action'] === 'edit'): ?>
-                <div class="success-message">
-                    <p style="color: green;"><?php echo htmlspecialchars($success); ?></p>
-                </div>
-            <?php endif; ?>
+    <div id="editModal" class="modal" style="display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+        <div class="modal-content" style="background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px;">
+            <span class="close" style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            <h2>Editar Cita</h2>
             <form method="POST" action="citas.php">
                 <input type="hidden" name="action" value="edit">
                 <input type="hidden" name="id" id="edit_id">
-                <label for="edit_title">Title:</label>
-                <input type="text" id="edit_title" name="title" class="form-input" required>
+                
+                <label for="edit_title">Título:</label>
+                <input type="text" id="edit_title" name="title" class="form-input" required style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem;">
 
-                <label for="edit_description">Description:</label>
-                <textarea id="edit_description" name="description" class="form-input" rows="4"></textarea>
+                <label for="edit_description">Descripción:</label>
+                <textarea id="edit_description" name="description" class="form-input" rows="4" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem;"></textarea>
 
-                <label for="edit_date">Date:</label>
-                <input type="date" id="edit_date" name="date" class="form-input" required>
+                <label for="edit_date">Fecha:</label>
+                <input type="date" id="edit_date" name="date" class="form-input" required style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem;">
 
-                <label for="edit_time">Time:</label>
-                <input type="time" id="edit_time" name="time" class="form-input" required>
+                <label for="edit_time">Hora:</label>
+                <input type="time" id="edit_time" name="time" class="form-input" required style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem;">
 
-                <label for="edit_location">Location:</label>
-                <input type="text" id="edit_location" name="location" class="form-input" required>
+                <label for="edit_location">Ubicación:</label>
+                <input type="text" id="edit_location" name="location" class="form-input" required style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem;">
 
-                <button type="submit" class="btn">Update Appointment</button>
+                <button type="submit" class="btn" style="padding: 0.5rem; background-color: var(--primary-dark); color: var(--accent-color); border: none; border-radius: 4px; cursor: pointer;">Actualizar Cita</button>
             </form>
         </div>
+    </div>
+
+    <!-- Formulario de Debug Pequeño en la Parte Inferior Derecha -->
+    <div class="debug-form" style="position: fixed; bottom: 10px; right: 10px; background: rgba(255,255,255,0.95); padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+        <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem;">Debug menu add appointment</h4>
+        <form method="POST" action="citas.php" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <input type="hidden" name="action" value="add">
+            <input type="text" name="title" placeholder="Título" class="form-input" required style="font-size: 0.8rem; padding: 0.25rem;">
+            <textarea name="description" placeholder="Descripción" class="form-input" style="font-size: 0.8rem; padding: 0.25rem;" rows="2"></textarea>
+            <input type="date" name="date" class="form-input" required style="font-size: 0.8rem; padding: 0.25rem;">
+            <input type="time" name="time" class="form-input" required style="font-size: 0.8rem; padding: 0.25rem;">
+            <input type="text" name="location" placeholder="Ubicación" class="form-input" required style="font-size: 0.8rem; padding: 0.25rem;">
+            <button type="submit" class="btn" style="font-size: 0.8rem; padding: 0.25rem; background-color: var(--primary-dark); color: var(--accent-color); border: none; border-radius: 4px; cursor: pointer;">Añadir</button>
+        </form>
     </div>
 
     <svg style="display: none;">
         <defs>
             <filter id="protanopia-filter">
                 <feColorMatrix type="matrix" values="0.567, 0.433, 0,     0, 0
-                                                     0.558, 0.442, 0,     0, 0
-                                                     0,     0.242, 0.758, 0, 0
-                                                     0,     0,     0,     1, 0"/>
+                                     0.558, 0.442, 0,     0, 0
+                                     0,     0.242, 0.758, 0, 0
+                                     0,     0,     0,     1, 0"/>
             </filter>
             <filter id="deuteranopia-filter">
                 <feColorMatrix type="matrix" values="0.625, 0.375, 0,   0, 0
-                                                     0.7,   0.3,   0,   0, 0
-                                                     0,     0.3,   0.7, 0, 0
-                                                     0,     0,     0,   1, 0"/>
+                                     0.7,   0.3,   0,   0, 0
+                                     0,     0.3,   0.7, 0, 0
+                                     0,     0,     0,   1, 0"/>
             </filter>
             <filter id="tritanopia-filter">
                 <feColorMatrix type="matrix" values="0.95, 0.05,  0,     0, 0
-                                                     0,    0.433, 0.567, 0, 0
-                                                     0,    0.475, 0.525, 0, 0
-                                                     0,    0,     0,     1, 0"/>
+                                     0,    0.433, 0.567, 0, 0
+                                     0,    0.475, 0.525, 0, 0
+                                     0,    0,     0,     1, 0"/>
             </filter>
         </defs>
     </svg>
@@ -782,14 +653,15 @@ function validateTime($time, $format = 'H:i') {
                 const appointmentItem = this.closest('.appointment-item');
                 const id = appointmentItem.getAttribute('data-id');
                 const title = appointmentItem.querySelector('.appointment-title').innerText;
-                const description = appointmentItem.querySelector('.appointment-message') ? appointmentItem.querySelector('.appointment-message').innerText : '';
+                const descriptionElement = appointmentItem.querySelector('.appointment-details p:nth-child(4)');
+                const description = descriptionElement ? descriptionElement.innerText.replace('Descripción: ', '') : '';
                 const dateText = appointmentItem.querySelector('.appointment-details p:nth-child(1)').innerText;
                 const timeText = appointmentItem.querySelector('.appointment-details p:nth-child(2)').innerText;
                 const locationText = appointmentItem.querySelector('.appointment-details p:nth-child(3)').innerText;
 
-                const date = dateText.replace('Date: ', '');
-                const time = timeText.replace('Time: ', '');
-                const location = locationText.replace('Location: ', '');
+                const date = dateText.replace('Fecha: ', '');
+                const time = timeText.replace('Hora: ', '');
+                const location = locationText.replace('Ubicación: ', '');
 
                 document.getElementById('edit_id').value = id;
                 document.getElementById('edit_title').value = title;
@@ -814,7 +686,7 @@ function validateTime($time, $format = 'H:i') {
             }
         }
 
-        // Calendar functionality
+        // Funcionalidad del Calendario
         const prevMonthBtn = document.getElementById('prevMonth');
         const nextMonthBtn = document.getElementById('nextMonth');
         const currentMonthSpan = document.getElementById('currentMonth');
@@ -822,24 +694,27 @@ function validateTime($time, $format = 'H:i') {
 
         let currentDate = new Date();
 
+        // Obtener las citas desde PHP
+        const appointments = <?php echo json_encode($appointments); ?>;
+
         function updateCalendar() {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
-            
-            currentMonthSpan.textContent = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentDate);
-            
+
+            currentMonthSpan.textContent = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(currentDate);
+
             const firstDay = new Date(year, month, 1);
             const lastDay = new Date(year, month + 1, 0);
-            
+
             calendarGrid.innerHTML = '';
 
             // Crear encabezados de los días de la semana
-            const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
             daysOfWeek.forEach(day => {
                 const dayHeader = document.createElement('div');
                 dayHeader.className = 'calendar-day';
-                dayHeader.style.backgroundColor = var(--primary-dark);
-                dayHeader.style.color = var(--text-color);
+                dayHeader.style.backgroundColor = 'var(--primary-dark)';
+                dayHeader.style.color = 'var(--text-color)';
                 dayHeader.style.fontWeight = 'bold';
                 dayHeader.style.textAlign = 'center';
                 dayHeader.innerText = day;
@@ -854,27 +729,16 @@ function validateTime($time, $format = 'H:i') {
                 calendarGrid.appendChild(emptyDay);
             }
 
-            // Obtener citas para el mes actual
-            try {
-                $stmt = $pdo->prepare("SELECT * FROM appointments WHERE MONTH(date) = :month AND YEAR(date) = :year");
-                $stmt->execute([
-                    'month' => $month + 1, // Los meses en SQL son 1-12
-                    'year' => $year
-                ]);
-                $monthlyAppointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            } catch (PDOException $e) {
-                die("Error al obtener las citas del mes: " . $e->getMessage());
-            }
-
             // Crear un array de citas por día
-            $appointmentsByDay = [];
-            foreach ($monthlyAppointments as $appointment) {
-                $day = date('j', strtotime($appointment['date']));
-                if (!isset($appointmentsByDay[$day])) {
-                    $appointmentsByDay[$day] = [];
+            const appointmentsByDay = {};
+            appointments.forEach(appointment => {
+                const appointmentDate = new Date(appointment.date);
+                const day = appointmentDate.getDate();
+                if (!appointmentsByDay[day]) {
+                    appointmentsByDay[day] = [];
                 }
-                $appointmentsByDay[$day][] = $appointment;
-            }
+                appointmentsByDay[day].push(appointment.title);
+            });
 
             // Crear los días del calendario
             for (let day = 1; day <= lastDay.getDate(); day++) {
@@ -886,8 +750,7 @@ function validateTime($time, $format = 'H:i') {
                     appointmentsByDay[day].forEach(appointment => {
                         const appointmentDiv = document.createElement('div');
                         appointmentDiv.className = 'appointment';
-                        appointmentDiv.innerText = appointment['title'];
-                        appointmentDiv.title = `${appointment['title']} at ${appointment['time']} - ${appointment['location']}`;
+                        appointmentDiv.innerText = appointment;
                         dayElement.appendChild(appointmentDiv);
                     });
                 }

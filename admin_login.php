@@ -1,4 +1,6 @@
 <?php
+session_start();
+
 // Datos de conexión a la base de datos en InfinityFree
 $host = 'localhost';
 $user = 'root';
@@ -11,27 +13,36 @@ $error = '';
 // Si el formulario fue enviado
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Recibir los datos del formulario
-    $email = trim($_POST['email']);         // Limpiar posibles espacios
+    $username = trim($_POST['username']);         // Limpiar posibles espacios
     $userPassword = trim($_POST['password']); // Limpiar posibles espacios
 
-    if (empty($email) || empty($userPassword)) {
+    if (empty($username) || empty($userPassword)) {
         $error = "Por favor, completa todos los campos.";
     } else {
         try {
             // Establecer conexión con la base de datos usando PDO
-            $pdo = new PDO("mysql:host=$host;dbname=$db", $user, $pass);
+            $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             
             // Verificar si el usuario existe en la base de datos
-            $stmt = $pdo->prepare("SELECT * FROM Customer WHERE Email = :email");
-            $stmt->execute(['email' => $email]);
+            $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = :username");
+            $stmt->execute(['username' => $username]);
             
             // Si se encuentra el usuario
             if ($stmt->rowCount() > 0) {
-                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                $admin = $stmt->fetch(PDO::FETCH_ASSOC);
                 
                 // Verificar la contraseña usando password_verify
-                if (password_verify($userPassword, $user['Password'])) {
+                if (password_verify($userPassword, $admin['password'])) {
+                    // Actualizar el estado de inicio de sesión y la última vez que inició sesión
+                    $updateStmt = $pdo->prepare("UPDATE admins SET is_logged_in = 1, last_login = NOW() WHERE id = :id");
+                    $updateStmt->execute(['id' => $admin['id']]);
+                    
+                    // Configurar variables de sesión
+                    $_SESSION['admin_id'] = $admin['id'];
+                    $_SESSION['username'] = $admin['username'];
+                    $_SESSION['role_id'] = $admin['role_id'];
+                    
                     // Redirigir al dashboard.php después del inicio de sesión exitoso
                     header('Location: dashboard.php');
                     exit();  // Asegúrate de que después de la redirección, el script no continúe ejecutándose
@@ -39,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $error = "Contraseña incorrecta.";
                 }
             } else {
-                $error = "El email no está registrado.";
+                $error = "El nombre de usuario no está registrado.";
             }
         } catch (PDOException $e) {
             $error = "Error de conexión: " . $e->getMessage();
@@ -48,24 +59,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 ?>
 
-
-
-
-
-
-
-
-
-
-
-
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HIP ENERGY Navigation</title>
+    <title>HIP ENERGY Navigation - Admin Login</title>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -239,10 +238,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             padding: 2rem;
             max-width: 400px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         .form-group {
             margin-bottom: 1rem;
+            width: 100%;
         }
 
         .form-group label {
@@ -261,8 +265,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .submit-btn {
             width: 100%;
             padding: 0.75rem;
-            background-color: #f3c517;
-            color: yellow;
+            background-color: #f3c517;  /* Color de fondo amarillo */
+            color: #000;  /* Texto en negro */
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -278,14 +282,53 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .recover-password {
             text-align: center;
             margin-top: 1rem;
+            width: 100%;
         }
 
         .recover-password a {
             color: var(--accent-color);
             text-decoration: none;
+            font-weight: 500;
         }
 
         .recover-password a:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            background-color: #ffdddd;
+            border-left: 6px solid #f44336;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-weight: 500;
+            width: 100%;
+            text-align: center;
+        }
+
+        .success-message {
+            background-color: #ddffdd;
+            border-left: 6px solid #4CAF50;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-weight: 500;
+            text-align: center;
+            width: 100%;
+        }
+
+        .main-content h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .success-message a {
+            color: var(--primary-dark);
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .success-message a:hover {
             text-decoration: underline;
         }
 
@@ -303,108 +346,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </style>
 </head>
 <body>
-
-<script>
-    (function() {
-        let timeout;
-        const redirectUrl = 'index.php';
-        const timeoutDuration = 5 * 60 * 1000; // 5 minutos en milisegundos
-
-        // Reiniciar el temporizador
-        function resetTimer() {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                window.location.href = redirectUrl;
-            }, timeoutDuration);
-        }
-
-        // Eventos que reinician el temporizador
-        window.onload = resetTimer;
-        document.onmousemove = resetTimer;
-        document.onkeydown = resetTimer;
-        document.onclick = resetTimer;
-        document.onscroll = resetTimer;
-    })();
-</script>
-
-    <nav class="sidebar">
-        <div class="brand">HIP ENERGY</div>
-        <div class="nav-items">
-            <a href="index.php" class="nav-item">
-                <i class="fas fa-sign-in-alt"></i>
-                <span>Login</span>
-            </a>
-            <a href="register.php" class="nav-item">
-                <i class="fas fa-user-plus"></i>
-                <span>Register</span>
-            </a>
-            <a href="recover_password.php" class="nav-item">
-                <i class="fas fa-key"></i>
-                <span>Recover Password</span>
-            </a>
-            <a href="admin_login.php" class="nav-item active">
-                <i class="fas fa-home"></i>
-               <span>Admin dashboard</span>
-            </a>
-
-        </div>
-        <div class="vision-modes">
-            <a href="#" class="nav-item" id="protanopiaToggle">
-                <i class="fas fa-eye"></i>
-                <span>Protanopia</span>
-            </a>
-            <a href="#" class="nav-item" id="deuteranopiaToggle">
-                <i class="fas fa-eye"></i>
-                <span>Deuteranopia</span>
-            </a>
-            <a href="#" class="nav-item" id="tritanopiaToggle">
-                <i class="fas fa-eye"></i>
-                <span>Tritanopia</span>
-            </a>
-            <a href="#" class="nav-item" id="normalModeToggle">
-                <i class="fas fa-eye-slash"></i>
-                <span>Normal Mode</span>
-            </a>
-        </div>
-        <div class="logo-container">
-            <img src="images/hiplogo.jpg" alt="HIP ENERGY Logo" class="logo">
-        </div>
-    </nav>
-
-<main class="main-content">
-    <h1>Login</h1>
-    <div class="form-container">
-        <form action="admin_login.php" method="POST">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" name="email" required>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit" class="submit-btn">Login</button>
-        </form>
-        <div class="recover-password">
-            <a href="#">Recover password</a>
-        </div>
-    </div>
-</main>
-
-
-
-<style>
-    .recover-password a {
-        color: #f3c517;  /* Color amarillo deseado */
-        text-decoration: none;  /* Elimina el subrayado */
-        transition: color 0.3s ease;  /* Transición suave cuando cambia el color */
-    }
-
-    .recover-password a:hover {
-        color: #d4a017;  /* Color cuando se pase el ratón por encima (puedes elegir otro) */
-    }
-</style>
-
 
     <svg style="display: none;">
         <defs>
@@ -429,17 +370,79 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </defs>
     </svg>
 
+    <nav class="sidebar">
+        <div class="brand">HIP ENERGY</div>
+        <div class="nav-items">
+            <a href="admin_login.php" class="nav-item active">
+                <i class="fas fa-sign-in-alt"></i>
+                <span>Login</span>
+            </a>
+            <a href="register.php" class="nav-item">
+                <i class="fas fa-user-plus"></i>
+                <span>Register</span>
+            </a>
+            <a href="recover_password.php" class="nav-item">
+                <i class="fas fa-key"></i>
+                <span>Recover Password</span>
+            </a>
+            <a href="admin_dashboard.php" class="nav-item">
+                <i class="fas fa-home"></i>
+               <span>Admin dashboard</span>
+            </a>
+        </div>
+        <div class="vision-modes">
+            <a href="#" class="nav-item" id="protanopiaToggle">
+                <i class="fas fa-eye"></i>
+                <span>Protanopia</span>
+            </a>
+            <a href="#" class="nav-item" id="deuteranopiaToggle">
+                <i class="fas fa-eye"></i>
+                <span>Deuteranopia</span>
+            </a>
+            <a href="#" class="nav-item" id="tritanopiaToggle">
+                <i class="fas fa-eye"></i>
+                <span>Tritanopia</span>
+            </a>
+            <a href="#" class="nav-item" id="normalModeToggle">
+                <i class="fas fa-eye-slash"></i>
+                <span>Normal Mode</span>
+            </a>
+        </div>
+        <div class="logo-container">
+            <img src="images/hiplogo.jpg" alt="HIP ENERGY Logo" class="logo">
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <h1>Login</h1>
+        <div class="form-container">
+            <?php if (!empty($error)): ?>
+                <div class="error-message">
+                    <?php echo htmlspecialchars($error); ?>
+                </div>
+            <?php endif; ?>
+            <form action="admin_login.php" method="POST">
+                <div class="form-group">
+                    <label for="username">Nombre de Usuario</label>
+                    <input type="text" id="username" name="username" required value="<?php echo isset($username) ? htmlspecialchars($username) : ''; ?>">
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="submit-btn">Login</button>
+            </form>
+            <div class="recover-password">
+                <a href="recover_password.php">Recover password</a>
+            </div>
+        </div>
+    </main>
+
     <script>
-        const accessibleModeToggle = document.getElementById('accessibleModeToggle');
         const protanopiaToggle = document.getElementById('protanopiaToggle');
         const deuteranopiaToggle = document.getElementById('deuteranopiaToggle');
         const tritanopiaToggle = document.getElementById('tritanopiaToggle');
         const normalModeToggle = document.getElementById('normalModeToggle');
-        
-        accessibleModeToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.body.classList.toggle('accessible-mode');
-        });
 
         function toggleColorBlindMode(mode) {
             document.documentElement.classList.remove('protanopia', 'deuteranopia', 'tritanopia');
@@ -464,6 +467,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             e.preventDefault();
             toggleColorBlindMode(null);
         });
+
+        (function() {
+            let timeout;
+            const redirectUrl = 'admin_login.php';
+            const timeoutDuration = 5 * 60 * 1000; // 5 minutos en milisegundos
+
+            // Reiniciar el temporizador
+            function resetTimer() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, timeoutDuration);
+            }
+
+            // Eventos que reinician el temporizador
+            window.onload = resetTimer;
+            document.onmousemove = resetTimer;
+            document.onkeydown = resetTimer;
+            document.onclick = resetTimer;
+            document.onscroll = resetTimer;
+        })();
     </script>
 </body>
 </html>

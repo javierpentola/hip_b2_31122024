@@ -23,15 +23,15 @@ try {
     die("Error de conexión: " . $e->getMessage());
 }
 
-// Verificar si el admin está logueado
+/* Verificar si el admin está logueado
 if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php'); // redirigir al login si no está logueado
+    header('Location: index.php'); // redirigir al login si no está logueado
     exit();
 }
-
+*/
 $admin_id = $_SESSION['admin_id'];
 
-// Obtener datos del admin (opcional, para mostrar en la interfaz)
+/* Obtener datos del admin (opcional, para mostrar en la interfaz)
 try {
     $stmt = $pdo->prepare("SELECT username FROM admins WHERE id = :id");
     $stmt->execute(['id' => $admin_id]);
@@ -39,13 +39,13 @@ try {
     if (!$admin) {
         // Admin no encontrado, cerrar sesión
         session_destroy();
-        header('Location: login.php');
+        header('Location: index.php');
         exit();
     }
 } catch (PDOException $e) {
     die("Error al obtener datos del admin: " . $e->getMessage());
 }
-
+*/
 // Obtener configuraciones actuales
 try {
     $stmt = $pdo->prepare("SELECT * FROM system_settings LIMIT 1");

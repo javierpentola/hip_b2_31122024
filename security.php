@@ -23,23 +23,23 @@ try {
     die("Error de conexión: " . $e->getMessage());
 }
 
-// Verificar si el admin está logueado
+/* Verificar si el admin está logueado
 if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php'); // redirigir al login si no está logueado
+    header('Location: index.php'); // redirigir al login si no está logueado
     exit();
-}
+}*/
 
 $admin_id = $_SESSION['admin_id'];
 
 // Obtener datos del admin
 try {
-    $stmt = $pdo->prepare("SELECT a.*, r.name as role_name FROM admins a LEFT JOIN roles r ON a.role_id = r.id WHERE a.id = :id");
+    $stmt = $pdo->prepare("SELECT a.*, r.role_name as role_name FROM admins a LEFT JOIN roles r ON a.role_id = r.id WHERE a.id = :id");
     $stmt->execute(['id' => $admin_id]);
     $admin = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$admin) {
         // Admin no encontrado, cerrar sesión
         session_destroy();
-        header('Location: login.php');
+        header('Location: index.php');
         exit();
     }
 } catch (PDOException $e) {
@@ -212,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Obtener lista de admins
 try {
-    $stmt = $pdo->prepare("SELECT a.id, a.username, a.last_login, a.is_logged_in, r.name as role_name FROM admins a LEFT JOIN roles r ON a.role_id = r.id");
+    $stmt = $pdo->prepare("SELECT a.*, r.name as role_name FROM admins a LEFT JOIN roles r ON a.role_id = r.id WHERE a.id = :id");
     $stmt->execute();
     $admin_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
