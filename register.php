@@ -436,7 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <nav class="sidebar">
         <div class="brand">HIP ENERGY</div>
         <div class="nav-items">
-            <a href="admin_login.php" class="nav-item">
+            <a href="index.php" class="nav-item">
                 <i class="fas fa-sign-in-alt"></i>
                 <span>Login</span>
             </a>
@@ -448,7 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <i class="fas fa-key"></i>
                 <span>Recover Password</span>
             </a>
-            <a href="admin_dashboard.php" class="nav-item">
+            <a href="admin_login.php" class="nav-item">
                 <i class="fas fa-home"></i>
                <span>Admin dashboard</span>
             </a>

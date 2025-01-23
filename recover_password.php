@@ -264,9 +264,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
+<svg style="display: none;">
+        <defs>
+            <filter id="protanopia-filter">
+                <feColorMatrix type="matrix" values="0.567, 0.433, 0,     0, 0
+                                                     0.558, 0.442, 0,     0, 0
+                                                     0,     0.242, 0.758, 0, 0
+                                                     0,     0,     0,     1, 0"/>
+            </filter>
+            <filter id="deuteranopia-filter">
+                <feColorMatrix type="matrix" values="0.625, 0.375, 0,   0, 0
+                                                     0.7,   0.3,   0,   0, 0
+                                                     0,     0.3,   0.7, 0, 0
+                                                     0,     0,     0,   1, 0"/>
+            </filter>
+            <filter id="tritanopia-filter">
+                <feColorMatrix type="matrix" values="0.95, 0.05,  0,     0, 0
+                                                     0,    0.433, 0.567, 0, 0
+                                                     0,    0.475, 0.525, 0, 0
+                                                     0,    0,     0,     1, 0"/>
+            </filter>
+        </defs>
+    </svg>
+
     <nav class="sidebar">
         <div class="brand">HIP ENERGY</div>
-        <div class="nav-items">
         <div class="nav-items">
             <a href="index.php" class="nav-item">
                 <i class="fas fa-sign-in-alt"></i>
@@ -282,7 +304,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </a>
             <a href="admin_login.php" class="nav-item">
                 <i class="fas fa-home"></i>
-               <span>Admin dashboard</span>
+               <span>Admin login</span>
             </a>
         </div>
         <div class="vision-modes">
@@ -368,16 +390,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </svg>
 
     <script>
-        const accessibleModeToggle = document.getElementById('accessibleModeToggle');
         const protanopiaToggle = document.getElementById('protanopiaToggle');
         const deuteranopiaToggle = document.getElementById('deuteranopiaToggle');
         const tritanopiaToggle = document.getElementById('tritanopiaToggle');
         const normalModeToggle = document.getElementById('normalModeToggle');
-        
-        accessibleModeToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.body.classList.toggle('accessible-mode');
-        });
 
         function toggleColorBlindMode(mode) {
             document.documentElement.classList.remove('protanopia', 'deuteranopia', 'tritanopia');
@@ -401,7 +417,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         normalModeToggle.addEventListener('click', (e) => {
             e.preventDefault();
             toggleColorBlindMode(null);
-        });   
+        });
+
+        (function() {
+            let timeout;
+            const redirectUrl = 'admin_login.php';
+            const timeoutDuration = 5 * 60 * 1000; // 5 minutos en milisegundos
+
+            // Reiniciar el temporizador
+            function resetTimer() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, timeoutDuration);
+            }
+
+            // Eventos que reinician el temporizador
+            window.onload = resetTimer;
+            document.onmousemove = resetTimer;
+            document.onkeydown = resetTimer;
+            document.onclick = resetTimer;
+            document.onscroll = resetTimer;
+        })();
     </script>
 </body>
 </html>

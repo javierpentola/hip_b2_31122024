@@ -1,29 +1,4 @@
 <?php
-
-session_start();
-
-// Tiempo máximo de inactividad en segundos (5 minutos)
-$timeout_duration = 300;
-
-// Verificar si el usuario está autenticado
-if (!isset($_SESSION['username'])) {
-    header("Location: index.php");
-    exit();
-}
-
-// Verificar la última actividad
-if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_duration) {
-    // Tiempo de inactividad excedido
-    session_unset();
-    session_destroy();
-    header("Location: index.php");
-    exit();
-}
-
-// Actualizar la última actividad
-$_SESSION['last_activity'] = time();
-
-
 ?>
 
 

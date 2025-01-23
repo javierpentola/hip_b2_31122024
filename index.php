@@ -68,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>HIP ENERGY Navigation</title>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <style>
         :root {
             --primary-color: #f2c517;
@@ -431,16 +432,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </svg>
 
     <script>
-        const accessibleModeToggle = document.getElementById('accessibleModeToggle');
         const protanopiaToggle = document.getElementById('protanopiaToggle');
         const deuteranopiaToggle = document.getElementById('deuteranopiaToggle');
         const tritanopiaToggle = document.getElementById('tritanopiaToggle');
         const normalModeToggle = document.getElementById('normalModeToggle');
-        
-        accessibleModeToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.body.classList.toggle('accessible-mode');
-        });
 
         function toggleColorBlindMode(mode) {
             document.documentElement.classList.remove('protanopia', 'deuteranopia', 'tritanopia');
@@ -465,6 +460,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             e.preventDefault();
             toggleColorBlindMode(null);
         });
+
+        (function() {
+            let timeout;
+            const redirectUrl = 'admin_login.php';
+            const timeoutDuration = 5 * 60 * 1000; // 5 minutos en milisegundos
+
+            // Reiniciar el temporizador
+            function resetTimer() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, timeoutDuration);
+            }
+
+            // Eventos que reinician el temporizador
+            window.onload = resetTimer;
+            document.onmousemove = resetTimer;
+            document.onkeydown = resetTimer;
+            document.onclick = resetTimer;
+            document.onscroll = resetTimer;
+        })();
     </script>
 </body>
 </html>

@@ -347,23 +347,7 @@
         </div>
     </nav>
 
-    <main class="main-content">
-        <h1>Fault Reporting</h1>
-        <div class="chat-container">
-            <div class="chat-messages" id="chatMessages">
-                <!-- Chat messages will be dynamically inserted here -->
-            </div>
-            <div class="quick-actions">
-                <button class="quick-action-btn" data-action="power-outage">Report Power Outage</button>
-                <button class="quick-action-btn" data-action="billing-issue">Billing Issue</button>
-                <button class="quick-action-btn" data-action="inform-problem">Inform Problem</button>
-            </div>
-            <div class="chat-input">
-                <input type="text" id="messageInput" placeholder="Type your message here...">
-                <button id="sendButton">Send</button>
-            </div>
-        </div>
-    </main>
+
 
     <svg style="display: none;">
         <defs>
